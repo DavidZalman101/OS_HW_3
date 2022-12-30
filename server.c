@@ -41,14 +41,14 @@ void getargs(struct user_params* user_params, int argc, char *argv[])
 
 struct Queue *queue = NULL;
 
-int* thread_static;
-int* thread_dynamic;
-int* thread_total;
 
 void* thread_func(void* thread_params) {
     while(1){
         struct Qnode* node = deQueueAndHandle(queue);
-        requestHandle(node->data);
+        struct timeval arrival_time = node->arrival;
+        struct timeval handle_time;
+        gettimeofday(&handle_time,NULL);
+        requestHandle(node->data, arrival_time, handle_time, (struct thread_params*)thread_params);
         Close(node->data);
         free(node);
         DoneHandle(queue);
@@ -67,9 +67,13 @@ int main(int argc, char *argv[])
     // init queues
     queue = createQueue(user_params.threads, user_params.queue_size, user_params.schedalg);
 
-    pthread_t* threads = (pthread_t*)malloc((size_t)user_params.threads * sizeof(pthread_t));
+    struct thread_params* threads = (struct thread_params*)malloc((size_t)user_params.threads * sizeof(*threads));
     for(int i=0 ; i < user_params.threads ; i++ ) {
-        pthread_create(&threads[i], NULL, thread_func, NULL);
+        threads[i].thread_idx = i;
+        threads[i].total_req = 0;
+        threads[i].static_req = 0;
+        threads[i].dynamic_req = 0;
+        pthread_create(&(threads[i].tid), NULL, thread_func, (void *)&threads[i]);
     }
     
     listenfd = Open_listenfd(user_params.portnum);
@@ -77,7 +81,9 @@ int main(int argc, char *argv[])
         int status;
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-        status = enQueue(queue, &connfd);
+        struct timeval arrival;
+        gettimeofday(&arrival,NULL);
+        status = enQueue(queue, &connfd, arrival);
         if(status != STATUS_SUCCESS)
             Close(connfd);
     }

@@ -6,7 +6,8 @@
 #include "request.h"
 
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
-void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) 
+void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg
+   ,struct timeval arrival, struct timeval handle, struct thread_params* thread) 
 {
    char buf[MAXLINE], body[MAXBUF];
 
@@ -27,6 +28,17 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
    printf("%s", buf);
 
    sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
+   
+   struct timeval diff;
+   timersub(&handle, &arrival, &diff);
+   sprintf(buf, "Stat-Req-Arrival:: %lu.%06lu\r\n", arrival.tv_sec, arrival.tv_usec);
+   sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, diff.tv_sec, diff.tv_usec);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, thread->thread_idx);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, thread->total_req);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, thread->static_req);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, thread->dynamic_req);
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
 
@@ -101,15 +113,26 @@ void requestGetFiletype(char *filename, char *filetype)
       strcpy(filetype, "text/plain");
 }
 
-void requestServeDynamic(int fd, char *filename, char *cgiargs)
+void requestServeDynamic(int fd, char *filename, char *cgiargs, 
+   struct timeval arrival, struct timeval handle, struct thread_params* thread)
 {
    char buf[MAXLINE], *emptylist[] = {NULL};
+   struct timeval diff;
+   
+   timersub(&handle, &arrival, &diff);
 
    // The server does only a little bit of the header.  
    // The CGI script has to finish writing out the header.
    sprintf(buf, "HTTP/1.0 200 OK\r\n");
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
-
+   sprintf(buf, "Stat-Req-Arrival:: %lu.%06lu\r\n", arrival.tv_sec, arrival.tv_usec);
+   sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, diff.tv_sec, diff.tv_usec);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, thread->thread_idx);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, thread->total_req);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, thread->static_req);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, thread->dynamic_req);
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
    Rio_writen(fd, buf, strlen(buf));
 
    if (Fork() == 0) {
@@ -123,10 +146,14 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs)
 }
 
 
-void requestServeStatic(int fd, char *filename, int filesize) 
+void requestServeStatic(int fd, char *filename, int filesize
+   ,struct timeval arrival, struct timeval handle, struct thread_params* thread) 
 {
    int srcfd;
    char *srcp, filetype[MAXLINE], buf[MAXBUF];
+   struct timeval diff;
+   
+   timersub(&handle, &arrival, &diff);
 
    requestGetFiletype(filename, filetype);
 
@@ -142,7 +169,12 @@ void requestServeStatic(int fd, char *filename, int filesize)
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
    sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
    sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
-
+   sprintf(buf, "Stat-Req-Arrival:: %lu.%06lu\r\n", arrival.tv_sec, arrival.tv_usec);
+   sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, diff.tv_sec, diff.tv_usec);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, thread->thread_idx);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, thread->total_req);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, thread->static_req);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, thread->dynamic_req);
    Rio_writen(fd, buf, strlen(buf));
 
    //  Writes out to the client socket the memory-mapped file 
@@ -152,7 +184,7 @@ void requestServeStatic(int fd, char *filename, int filesize)
 }
 
 // handle a request
-void requestHandle(int fd)
+void requestHandle(int fd,struct timeval arrival, struct timeval handle, struct thread_params* thread)
 {
 
    int is_static;
@@ -168,29 +200,37 @@ void requestHandle(int fd)
    printf("%s %s %s\n", method, uri, version);
 
    if (strcasecmp(method, "GET")) {
-      requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method");
+      thread->total_req++;
+      requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method", arrival, handle, thread);
       return;
    }
    requestReadhdrs(&rio);
 
    is_static = requestParseURI(uri, filename, cgiargs);
    if (stat(filename, &sbuf) < 0) {
-      requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file");
+            thread->total_req++;
+      requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file", arrival, handle, thread);
       return;
    }
 
    if (is_static) {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
-         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file");
+         thread->total_req++;
+         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file", arrival, handle, thread);
          return;
       }
-      requestServeStatic(fd, filename, sbuf.st_size);
+      thread->total_req++;
+      thread->static_req++;
+      requestServeStatic(fd, filename, sbuf.st_size, arrival, handle, thread);
    } else {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
-         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program");
+         thread->total_req++;
+         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program", arrival, handle, thread);
          return;
       }
-      requestServeDynamic(fd, filename, cgiargs);
+      thread->total_req++;
+      thread->dynamic_req++;
+      requestServeDynamic(fd, filename, cgiargs, arrival, handle, thread);
    }
 }
 

@@ -18,6 +18,7 @@ enum overload_handling {
 // Queue Node
 struct Qnode {
     int data;
+    struct timeval arrival;
 };
 
 // The Queue implement as array with consumer producer - User must use the lock.
@@ -35,13 +36,13 @@ struct Queue {
 };
 
 // A utility function to create a new linked list node.
-struct Qnode* newNode(int data);
+struct Qnode* newNode(int data, struct timeval arrival);
 
 // A utility function to create an empty queue
 struct Queue* createQueue(int max_threads, int max_requests, enum overload_handling schedalg);
 
 // Move request to wait room.
-int enQueue(struct Queue* q, int *data);
+int enQueue(struct Queue* q, int *data, struct timeval arrival);
 
 // Take request from wait room and make thread to handle it. 
 struct Qnode* deQueueAndHandle(struct Queue* q);

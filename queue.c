@@ -1,10 +1,11 @@
 #include "queue.h"
 
-struct Qnode* newNode(int data)
+struct Qnode* newNode(int data, struct timeval arrival)
 {
     struct Qnode* temp
             = (struct Qnode*)malloc(sizeof(struct Qnode));
     temp->data = data;
+    temp->arrival = arrival;
     return temp;
 }
 
@@ -32,7 +33,7 @@ void destroyQueue(struct Queue* q){
     free(q);
 }
 
-int enQueue(struct Queue* q, int *data)
+int enQueue(struct Queue* q, int *data, struct timeval arrival)
 {
     pthread_mutex_lock(&q->lock);
     // Save orig data, in case of DH data pointer should 
@@ -54,14 +55,14 @@ int enQueue(struct Queue* q, int *data)
     // Block - we waited till there a place to add new req.
     // DH - we just deleted the old req so the place to add new one.    
     
-    struct Qnode* temp = newNode(true_data);
+    struct Qnode* temp = newNode(true_data,arrival);
     // TODO
     q->queue[q->producer % (q->max_requests)] = temp;
     q->producer++;
 
     pthread_cond_broadcast(&q->wait_data);
     pthread_mutex_unlock(&q->lock);
-    // In Case o
+    // In Case we are in BLOCK
     if(q->schedalg == BLOCK)
         return STATUS_SUCCESS;
     // in case we are on DH data poiner have dt of oldest request , we want to close it. 
