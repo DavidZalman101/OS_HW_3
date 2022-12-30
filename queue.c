@@ -1,6 +1,5 @@
 #include "queue.h"
 
-/*              Qnode Implementions             */
 struct Qnode* newNode(int data)
 {
     struct Qnode* temp
@@ -9,92 +8,88 @@ struct Qnode* newNode(int data)
     return temp;
 }
 
-/*              Queue Implementions             */
-struct Queue* createQueue(int max_size)
+struct Queue* createQueue(int max_threads, int max_requests)
 {
     struct Queue* q = (struct Queue*)malloc(sizeof(struct Queue));
-    q->queue = (struct Qnode**)malloc(sizeof(struct Queue*) *(size_t)max_size);
-    q->max_size = max_size;
+    q->queue = (struct Qnode**)malloc(sizeof(struct Qnode*) * (size_t)max_requests);
+    pthread_mutex_init(&q->lock, NULL);
+    pthread_cond_init(&q->wait_room, NULL);
+    pthread_cond_init(&q->wait_data, NULL);
+    q->max_threads = max_threads;
+    q->max_requests = max_requests;
+    q->active_threads = 0;
     q->producer = 0;
     q->consumer = 0;
     return q;
 }
 
-
 void destroyQueue(struct Queue* q){
-    for(int i=0;i<q->max_size;i++){
-        if(q->queue)
-            free(q->queue);
+    for(int i = 0; i < q->max_requests; i++) { // TODO: Assure that after dequeue we refer pointer to null.
+        if(q->queue[i])
+            free(q->queue[i]);
     }
     free(q);
 }
 
-void enQueue(struct Queue* q, int data, pthread_mutex_t *lock)
+void enQueue(struct Queue* q, int data)
 {
-    while(q->producer - q->consumer >= q->max_size){
-        pthread_cond_wait(&q->wait_room, lock);
+    pthread_mutex_lock(&q->lock);
+    // Handle if there are too many requests.
+    if ((q->producer - q->consumer) + q->active_threads >= q->max_requests) {
+        // TODO: Part 2.
+        printf("Part 2 will handle soon");
+    }
+    
+    // if go there number of requests < max_requests
+    while(q->producer - q->consumer >= q->max_requests) {
+        pthread_cond_wait(&q->wait_room, &q->lock);
     }
 
     struct Qnode* temp = newNode(data);
-    q->queue[q->producer & (q->max_size-1)] = temp;
+    // TODO
+    q->queue[q->producer % (q->max_requests)] = temp;
     q->producer++;
 
     pthread_cond_broadcast(&q->wait_data);
+    pthread_mutex_unlock(&q->lock);
 }
 
-void deQueue(struct Queue* q, pthread_mutex_t *lock)
+struct Qnode* deQueueAndHandle(struct Queue* q)
 {
+    pthread_mutex_lock(&q->lock);
+    
     struct Qnode* node;
-
+    
     while((q->producer - q->consumer)==0)
-        pthread_cond_wait(&q->wait_data, lock);
+        pthread_cond_wait(&q->wait_data, &q->lock);
 
-    node = q->queue[q->consumer & (q->max_size-1)];
-    q->queue[q->consumer & (q->max_size-1)] = NULL;
+    node = q->queue[q->consumer % (q->max_requests)];
+    q->queue[q->consumer % (q->max_requests)] = NULL;
     q->consumer++;
-    free(node);
+    q->active_threads++;
 
     pthread_cond_signal(&q->wait_room);
+    pthread_mutex_unlock(&q->lock);
+    
+    return node;
 }
 
-// Function to check if Queue is empty
-bool QueueEmpty(struct Queue* q) {
-    return (q->consumer - q->producer == 0);
+void DoneHandle(struct Queue* q) {
+    pthread_mutex_lock(&q->lock);
+    
+    q->active_threads--;
+    
+    pthread_mutex_unlock(&q->lock);
 }
 
-// Function to check the Queue size
-int QueueSize(struct Queue* q) {
-    return (q->consumer - q->producer);
-}
-// deQueue Specific Node by his data
-void deQueueSpecifif(struct Queue* q, int data) {
-    int temp_consumer = q->consumer;
 
-    while(temp_consumer - q->producer <=0) {
-        struct Qnode* temp;
-        temp = q->queue[temp_consumer & (q->max_size-1)];
-        if(temp->data == data){
-            q->queue[temp_consumer & (q->max_size-1)] = q->queue[q->consumer & (q->max_size-1)];
-            q->queue[q->consumer & (q->max_size-1)] = temp;
-            deQueue(q);
-            break;
-        }
+
+/*
+Thread_function { 
+    while(1){
+        deQueueAndHandle();
+        HandleRequest();
+        DoneHandle();
     }
-
 }
-
-int QueueNextConcumerData(struct Queue* q) {
-    return q->queue[q->consumer & (q->max_size-1)]->data;
-}
-
-/*              Queues Implementions             */
-// Init the queues
-struct Queues* initQueues(int wait_queue_size,int workers_queue_size) {
-    struct Queues* queues = (struct Queues*)malloc(sizeof(struct Queues));
-    queues->wait_queue = createQueue(user_params.queue_size);
-    queues->worker_queue = createQueue(user_params.threads);
-    // init locks
-    pthread_mutex_init(&lock, NULL);
-    pthread_cond_init(&wait_room, NULL);
-    pthread_cond_init(&wait_data, NULL);
-}
+*/
