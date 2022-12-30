@@ -6,6 +6,15 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#define STATUS_SUCCESS 0 
+#define STATUS_FAIL 1 
+
+enum overload_handling { 
+    BLOCK=0,
+    DT,
+    DH
+};
+
 // Queue Node
 struct Qnode {
     int data;
@@ -22,22 +31,25 @@ struct Queue {
     int active_threads; // number of thread that currently handle requests.
     int producer;
     int consumer;
+    enum overload_handling schedalg;
 };
 
 // A utility function to create a new linked list node.
 struct Qnode* newNode(int data);
 
 // A utility function to create an empty queue
-struct Queue* createQueue(int max_threads, int max_requests);
+struct Queue* createQueue(int max_threads, int max_requests, enum overload_handling schedalg);
 
 // Move request to wait room.
-void enQueue(struct Queue* q, int data);
+int enQueue(struct Queue* q, int *data);
 
 // Take request from wait room and make thread to handle it. 
 struct Qnode* deQueueAndHandle(struct Queue* q);
 
 // Done handle request 
 void DoneHandle(struct Queue* q);
+
+int OverloadHandle(struct Queue* q, int *data);
 
 #define QUEUE_H
 

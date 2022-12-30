@@ -19,7 +19,7 @@ struct user_params {
     int portnum;
     int threads;
     int queue_size;
-    char schedalg[7];
+    enum overload_handling schedalg;
 };
 
 void getargs(struct user_params* user_params, int argc, char *argv[])
@@ -31,7 +31,12 @@ void getargs(struct user_params* user_params, int argc, char *argv[])
     user_params->portnum = atoi(argv[1]);
     user_params->threads = atoi(argv[2]);
     user_params->queue_size = atoi(argv[3]);
-    strcpy(user_params->schedalg,argv[4]);
+    if(strcmp("block",argv[4]) == 0) 
+        user_params->schedalg = BLOCK;
+    else if(strcmp("dt",argv[4]) == 0) 
+        user_params->schedalg = DT; 
+    else if(strcmp("dh",argv[4]) == 0) 
+        user_params->schedalg = DH;
 }
 
 struct Queue *queue = NULL;
@@ -43,6 +48,7 @@ int* thread_total;
 void* thread_func(void* thread_params) {
     while(1){
         struct Qnode* node = deQueueAndHandle(queue);
+        requestHandle(node->data);
         Close(node->data);
         free(node);
         DoneHandle(queue);
@@ -59,7 +65,7 @@ int main(int argc, char *argv[])
     getargs(&user_params, argc, argv);
 
     // init queues
-    queue = createQueue(user_params.threads, user_params.queue_size);
+    queue = createQueue(user_params.threads, user_params.queue_size, user_params.schedalg);
 
     pthread_t* threads = (pthread_t*)malloc((size_t)user_params.threads * sizeof(pthread_t));
     for(int i=0 ; i < user_params.threads ; i++ ) {
@@ -68,20 +74,13 @@ int main(int argc, char *argv[])
     
     listenfd = Open_listenfd(user_params.portnum);
     while (1) {
+        int status;
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-        enQueue(queue, connfd);
-
-        // Comment : This is their Comments.
-        // HW3: In general, don't handle the request in the main thread.
-        // Save the relevant info in a buffer and have one of the worker threads
-        // do the work.
-        //
-        // requestHandle(connfd);
-
-        // Close(connfd);
+        status = enQueue(queue, &connfd);
+        if(status != STATUS_SUCCESS)
+            Close(connfd);
     }
-
 }
 
 
