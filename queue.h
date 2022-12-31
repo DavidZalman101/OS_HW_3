@@ -12,7 +12,8 @@
 enum overload_handling { 
     BLOCK=0,
     DT,
-    DH
+    DH,
+    RANDOM
 };
 
 // Queue Node

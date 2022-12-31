@@ -1,4 +1,5 @@
 #include "queue.h"
+#include "segel.h"
 
 struct Qnode* newNode(int data, struct timeval arrival)
 {
@@ -40,15 +41,16 @@ int enQueue(struct Queue* q, int *data, struct timeval arrival)
     // be with fd that we want to close.
     // in case of DT data not change.
     int true_data = *data;
-    int status = STATUS_SUCCESS;
+    bool overload_handle = false;
     // Handle if there is overload.
     if ((q->producer - q->consumer) + q->active_threads >= q->max_requests) {
-        status = OverloadHandle(q, data);
-    }
-    if (status != STATUS_SUCCESS) {
-    // In case we handeling DT - Close fd in data pointer
-        pthread_mutex_unlock(&q->lock);
-        return STATUS_FAIL;
+        int status = OverloadHandle(q, data);
+        overload_handle = true;
+        if (status != STATUS_SUCCESS) {
+    // In case we handeling DT or DH with empty wait queue - Close fd in data pointer.
+            pthread_mutex_unlock(&q->lock);
+            return STATUS_FAIL;
+        }
     }
 
     // If we are here than were handeling BLOCK or DH.
@@ -63,7 +65,7 @@ int enQueue(struct Queue* q, int *data, struct timeval arrival)
     pthread_cond_broadcast(&q->wait_data);
     pthread_mutex_unlock(&q->lock);
     // In Case we are in BLOCK
-    if(q->schedalg == BLOCK)
+    if(q->schedalg == BLOCK || q->schedalg == RANDOM || !overload_handle)
         return STATUS_SUCCESS;
     // in case we are on DH data poiner have dt of oldest request , we want to close it. 
     return STATUS_FAIL;
@@ -110,13 +112,56 @@ int OverloadHandle(struct Queue* q, int *data){
     }
     else if (q->schedalg == DH) {
         // Let's just enqueue the oldest one later in the function will just add other one.
-        if(q->producer - q->consumer > 0) {
+        if(q->producer - q->consumer > 0) { // if queueu is not empty 
             struct Qnode *node = q->queue[q->consumer % (q->max_requests)];
             q->queue[q->consumer % (q->max_requests)] = NULL;
             q->consumer++;
             *data = node->data;
             free(node);
         }
+        else 
+            return STATUS_FAIL;
+    }
+    else if (q->schedalg == RANDOM) {
+        // Let's just enqueue the oldest one later in the function will just add other one.
+        if(q->producer - q->consumer > 0) { // if queueu is not empty
+            int old_consumer = q->consumer;
+            int init_reqs_num = q->producer - q->consumer;
+            int num_req_to_drop =  (init_reqs_num+1)/2;
+            q->consumer = q->producer;
+            int* hist = (int*)malloc(sizeof(*hist)*init_reqs_num);
+
+            for(int i=0 ; i<init_reqs_num ; i++) {
+            hist[i]=0;
+            }
+
+            for(int i=0 ; i<num_req_to_drop ; i++){
+                bool success = STATUS_FAIL;
+                while (success != STATUS_SUCCESS) {
+                    int to_drop = rand() % init_reqs_num;
+                    if(hist[to_drop] == 0) {
+                        hist[to_drop] = 1;
+                        success = STATUS_SUCCESS;
+                    }
+                }
+            }
+
+                 for(int i=0 ; i<init_reqs_num ; i++) {
+                    if(hist[i] == 0) {
+                        q->queue[q->producer % (q->max_requests)] = q->queue[(old_consumer+i) % (q->max_requests)];
+                        q->queue[(old_consumer+i) % (q->max_requests)] = NULL;
+                        q->producer++;
+                    }
+                    else {
+                        Close(q->queue[(old_consumer+i) % (q->max_requests)]->data);
+                        free(q->queue[(old_consumer+i) % (q->max_requests)]);
+                        q->queue[(old_consumer+i) % (q->max_requests)] = NULL;
+                    }
+                }
+            free(hist);
+        }
+        else 
+            return STATUS_FAIL;
     }
     return STATUS_SUCCESS;
 }

@@ -37,6 +37,8 @@ void getargs(struct user_params* user_params, int argc, char *argv[])
         user_params->schedalg = DT; 
     else if(strcmp("dh",argv[4]) == 0) 
         user_params->schedalg = DH;
+    else if(strcmp("random",argv[4]) == 0) 
+        user_params->schedalg = RANDOM;
 }
 
 struct Queue *queue = NULL;
@@ -84,8 +86,9 @@ int main(int argc, char *argv[])
         struct timeval arrival;
         gettimeofday(&arrival,NULL);
         status = enQueue(queue, &connfd, arrival);
-        if(status != STATUS_SUCCESS)
+        if(status != STATUS_SUCCESS) {
             Close(connfd);
+        }
     }
 }
 
