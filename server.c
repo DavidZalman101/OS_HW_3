@@ -80,7 +80,6 @@ int main(int argc, char *argv[])
     
     listenfd = Open_listenfd(user_params.portnum);
     while (1) {
-        int status;
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
         struct timeval arrival;
