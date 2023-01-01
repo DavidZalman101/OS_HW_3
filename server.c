@@ -85,10 +85,7 @@ int main(int argc, char *argv[])
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
         struct timeval arrival;
         gettimeofday(&arrival,NULL);
-        status = enQueue(queue, &connfd, arrival);
-        if(status != STATUS_SUCCESS) {
-            Close(connfd);
-        }
+        enQueue(queue, connfd, arrival);
     }
 }
 

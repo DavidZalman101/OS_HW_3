@@ -43,7 +43,7 @@ struct Qnode* newNode(int data, struct timeval arrival);
 struct Queue* createQueue(int max_threads, int max_requests, enum overload_handling schedalg);
 
 // Move request to wait room.
-int enQueue(struct Queue* q, int *data, struct timeval arrival);
+void enQueue(struct Queue* q, int data, struct timeval arrival);
 
 // Take request from wait room and make thread to handle it. 
 struct Qnode* deQueueAndHandle(struct Queue* q);
@@ -51,7 +51,7 @@ struct Qnode* deQueueAndHandle(struct Queue* q);
 // Done handle request 
 void DoneHandle(struct Queue* q);
 
-int OverloadHandle(struct Queue* q, int *data);
+int OverloadHandle(struct Queue* q, int data);
 
 #define QUEUE_H
 

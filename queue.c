@@ -34,41 +34,30 @@ void destroyQueue(struct Queue* q){
     free(q);
 }
 
-int enQueue(struct Queue* q, int *data, struct timeval arrival)
+void enQueue(struct Queue* q, int data, struct timeval arrival)
 {
     pthread_mutex_lock(&q->lock);
-    // Save orig data, in case of DH data pointer should 
-    // be with fd that we want to close.
     // in case of DT data not change.
-    int true_data = *data;
-    bool overload_handle = false;
+    
     // Handle if there is overload.
     if ((q->producer - q->consumer) + q->active_threads >= q->max_requests) {
-        int status = OverloadHandle(q, data);
-        overload_handle = true;
-        if (status != STATUS_SUCCESS) {
-    // In case we handeling DT or DH with empty wait queue - Close fd in data pointer.
+        if (OverloadHandle(q, data) != STATUS_SUCCESS) {
+    // In case we handeling DT or DH/Random with empty wait queue - Close fd in data pointer.
             pthread_mutex_unlock(&q->lock);
-            return STATUS_FAIL;
+            return;
         }
     }
 
-    // If we are here than were handeling BLOCK or DH.
-    // Block - we waited till there a place to add new req.
-    // DH - we just deleted the old req so the place to add new one.    
+    // If we are here than were handeling BLOCK or DH or Random.
+    // Both case we want to just add new node 
     
-    struct Qnode* temp = newNode(true_data,arrival);
-    // TODO
+    struct Qnode* temp = newNode(data,arrival);
     q->queue[q->producer % (q->max_requests)] = temp;
     q->producer++;
 
     pthread_cond_broadcast(&q->wait_data);
     pthread_mutex_unlock(&q->lock);
     // In Case we are in BLOCK
-    if(q->schedalg == BLOCK || q->schedalg == RANDOM || !overload_handle)
-        return STATUS_SUCCESS;
-    // in case we are on DH data poiner have dt of oldest request , we want to close it. 
-    return STATUS_FAIL;
 }
 
 struct Qnode* deQueueAndHandle(struct Queue* q)
@@ -99,7 +88,7 @@ void DoneHandle(struct Queue* q) {
     pthread_mutex_unlock(&q->lock);
 }
 
-int OverloadHandle(struct Queue* q, int *data){
+int OverloadHandle(struct Queue* q, int data){
     if(q->schedalg == BLOCK) {
         // In Case of block we should wait till will be place for new job
         while((q->producer - q->consumer) + q->active_threads >= q->max_requests)
@@ -108,6 +97,7 @@ int OverloadHandle(struct Queue* q, int *data){
     // In this case we should close the fd and try so lets pipe STATUS_FAIL
     //  and end the enqueue, out function we will Close() and iterate new one.
     else if (q->schedalg == DT) {
+        Close(data);
         return STATUS_FAIL;
     }
     else if (q->schedalg == DH) {
@@ -116,11 +106,13 @@ int OverloadHandle(struct Queue* q, int *data){
             struct Qnode *node = q->queue[q->consumer % (q->max_requests)];
             q->queue[q->consumer % (q->max_requests)] = NULL;
             q->consumer++;
-            *data = node->data;
+            Close(node->data);
             free(node);
         }
-        else 
+        else {
+            Close(data);
             return STATUS_FAIL;
+        }
     }
     else if (q->schedalg == RANDOM) {
         // Let's just enqueue the oldest one later in the function will just add other one.
@@ -160,8 +152,10 @@ int OverloadHandle(struct Queue* q, int *data){
                 }
             free(hist);
         }
-        else 
+        else {
+            Close(data);
             return STATUS_FAIL;
+        }
     }
     return STATUS_SUCCESS;
 }
