@@ -14,7 +14,6 @@
 
 // HW3: Parse the new arguments too
 
-
 struct user_params {
     int portnum;
     int threads;
@@ -51,9 +50,8 @@ void* thread_func(void* thread_params) {
         struct timeval handle_time;
         gettimeofday(&handle_time,NULL);
         requestHandle(node->data, arrival_time, handle_time, (struct thread_params*)thread_params);
-        Close(node->data);
+        DoneHandle(queue, node->data);
         free(node);
-        DoneHandle(queue);
     }
 }
 
@@ -77,7 +75,6 @@ int main(int argc, char *argv[])
         threads[i].dynamic_req = 0;
         pthread_create(&(threads[i].tid), NULL, thread_func, (void *)&threads[i]);
     }
-    
     listenfd = Open_listenfd(user_params.portnum);
     while (1) {
         clientlen = sizeof(clientaddr);

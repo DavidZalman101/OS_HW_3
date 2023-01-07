@@ -49,7 +49,7 @@ void enQueue(struct Queue* q, int data, struct timeval arrival);
 struct Qnode* deQueueAndHandle(struct Queue* q);
 
 // Done handle request 
-void DoneHandle(struct Queue* q);
+void DoneHandle(struct Queue* q, int data);
 
 int OverloadHandle(struct Queue* q, int data);
 

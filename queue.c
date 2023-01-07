@@ -79,12 +79,12 @@ struct Qnode* deQueueAndHandle(struct Queue* q)
     return node;
 }
 
-void DoneHandle(struct Queue* q) {
+void DoneHandle(struct Queue* q, int data) {
     pthread_mutex_lock(&q->lock);
     
+    Close(data);
     q->active_threads--;
-    pthread_cond_signal(&q->wait_room);
-    
+    pthread_cond_broadcast(&q->wait_room);
     pthread_mutex_unlock(&q->lock);
 }
 
